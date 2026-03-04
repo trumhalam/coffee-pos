@@ -15,33 +15,32 @@ function saveCart() {
 }
 
 // ========== TOAST SYSTEM ==========
-function createToastContainer() {
-    if (!document.getElementById('toast-container')) {
-        const div = document.createElement('div');
-        div.id = 'toast-container';
-        div.innerHTML = `
-            <div id="toast" class="fixed top-4 right-4 z-50 transform translate-x-full transition-transform duration-300">
-                <div class="bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
-                    <i class="fas fa-check-circle text-green-400"></i>
-                    <span id="toast-message"></span>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(div);
-    }
-}
-
 function showToast(message, type = 'success') {
-    createToastContainer();
-    const toast = document.getElementById('toast');
-    const msgEl = document.getElementById('toast-message');
-    const icon = toast.querySelector('i');
+    // Xóa toast cũ nếu có
+    const oldToast = document.getElementById('toast-notification');
+    if (oldToast) oldToast.remove();
     
-    msgEl.textContent = message;
-    icon.className = type === 'error' ? 'fas fa-exclamation-circle text-red-400' : 'fas fa-check-circle text-green-400';
+    // Tạo toast mới
+    const toast = document.createElement('div');
+    toast.id = 'toast-notification';
+    toast.className = `fixed top-4 right-4 z-[9999] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 transform transition-all duration-300 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'} text-white`;
+    toast.innerHTML = `
+        <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}"></i>
+        <span class="font-medium text-sm">${message}</span>
+    `;
     
-    toast.classList.remove('translate-x-full');
-    setTimeout(() => toast.classList.add('translate-x-full'), 3000);
+    document.body.appendChild(toast);
+    
+    // Hiệu ứng slide in
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(0)';
+    });
+    
+    // Tự động ẩn sau 3 giây
+    setTimeout(() => {
+        toast.style.transform = 'translateX(150%)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // ========== AUTH ==========
@@ -83,7 +82,7 @@ function showLoginPage() {
                 </p>
             </div>
         </div>`;
-    createToastContainer();
+
 }
 
 function showRegisterPage() {
@@ -111,7 +110,7 @@ function showRegisterPage() {
                 </p>
             </div>
         </div>`;
-    createToastContainer();
+
 }
 
 async function handleLogin(e) {
@@ -250,7 +249,7 @@ function initApp() {
         </div>
     `;
     
-    createToastContainer();
+
     
     setInterval(() => {
         const el = document.getElementById('current-time');
@@ -317,15 +316,18 @@ async function loadSalesPage(container) {
                     <button onclick="filterProducts(0)" class="cat-filter px-4 py-2 bg-blue-500 text-white rounded-full text-sm whitespace-nowrap" data-cat="0">Tất cả</button>
                     ${categories.map(c => `<button onclick="filterProducts(${c.id})" class="cat-filter px-4 py-2 bg-gray-100 rounded-full text-sm whitespace-nowrap" data-cat="${c.id}">${c.name}</button>`).join('')}
                 </div>
-                <div id="products-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto flex-1 pb-4 content-start"></div>
+                <div id="products-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto flex-1 pb-32 md:pb-4 content-start"></div>
             </div>
-            <div class="bg-white rounded-2xl shadow-sm border flex flex-col h-[calc(100vh-200px)] lg:h-auto">
+            <!-- Cart Section - Mobile: Fixed bottom, Desktop: Normal -->
+            <div class="bg-white rounded-2xl shadow-sm border flex flex-col h-[calc(100vh-200px)] lg:h-auto relative">
                 <div class="p-4 border-b flex justify-between items-center">
                     <h3 class="font-bold text-lg">Giỏ hàng</h3>
                     <button onclick="clearCart()" class="text-red-500 text-sm">Xóa</button>
                 </div>
                 <div id="cart-items" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
-                <div class="p-4 border-t bg-gray-50 rounded-b-2xl">
+                
+                <!-- Cart Summary - Desktop -->
+                <div class="hidden lg:block p-4 border-t bg-gray-50 rounded-b-2xl">
                     <button onclick="showDiscountModal()" id="discount-btn" class="w-full mb-3 py-2 text-blue-600 text-sm font-medium border border-blue-200 rounded-lg hover:bg-blue-50">
                         <i class="fas fa-tag mr-2"></i>Thêm mã giảm giá
                     </button>
@@ -345,6 +347,17 @@ async function loadSalesPage(container) {
                         Thanh toán
                     </button>
                 </div>
+            </div>
+            
+            <!-- Mobile Cart Summary - Fixed Bottom -->
+            <div class="lg:hidden fixed bottom-[60px] left-0 right-0 bg-white border-t shadow-lg z-40 px-4 py-3">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-gray-600">Tổng cộng</span>
+                    <span id="cart-total-mobile" class="text-xl font-bold text-blue-600">0đ</span>
+                </div>
+                <button onclick="showCheckoutModal()" id="checkout-btn-mobile" disabled class="w-full bg-green-500 text-white py-3 rounded-xl font-bold disabled:bg-gray-300 disabled:cursor-not-allowed shadow-lg">
+                    Thanh toán
+                </button>
             </div>
         </div>
     `;
@@ -435,13 +448,22 @@ function updateCartUI() {
     const discountAmount = appliedDiscount ? appliedDiscount.amount : 0;
     const total = Math.max(0, subtotal - discountAmount);
     
+    // Desktop elements
     const subtotalEl = document.getElementById('cart-subtotal');
     const totalEl = document.getElementById('cart-total');
     const checkoutBtn = document.getElementById('checkout-btn');
     
+    // Mobile elements
+    const totalMobileEl = document.getElementById('cart-total-mobile');
+    const checkoutBtnMobile = document.getElementById('checkout-btn-mobile');
+    
     if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
     if (totalEl) totalEl.textContent = formatMoney(total);
     if (checkoutBtn) checkoutBtn.disabled = cart.length === 0;
+    
+    // Update mobile
+    if (totalMobileEl) totalMobileEl.textContent = formatMoney(total);
+    if (checkoutBtnMobile) checkoutBtnMobile.disabled = cart.length === 0;
     
     const discountDisplay = document.getElementById('discount-display');
     if (discountDisplay) {
